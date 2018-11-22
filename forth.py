@@ -1,17 +1,202 @@
 #!/usr/bin/env python
 
 import sys
+from functools import wraps
 
 
 class Forth():
+
     def __init__(self):
         self.stack = list()
         self.dictionary = dict()
+        self.instructionset = dict()
+        self.instructionset = {"CR": self.CR, "SPACE": self.SPACE, "SPACES": self.SPACES,  '.': "DOT",       ":": self.COLON,
+                              "DUP": self.DUP, "DROP": self.DROP,    "TUCK": self.TUCK, "OVER": self.OVER, "ROT": self.ROT,
+                               "IF": self.IF,   "AND": self.AND,       "OR": self.OR,    "NOT": self.NOT,  "MOD": self.MOD,
+                                "<": self.LT,     ">": self.GT,         "=": self.EQ,     "0=": self.EQZ,    "+": self.ADD,
+                                "-": self.SUB,    "*": self.MUL,        "/": self.DIV,  "EMIT": self.EMIT,  "DO": self.DO}
+
+    def CR(self):
+        print("")
+
+    def SPACE(self):
+        print(" ", end='')
+
+    def SPACES(self):
+        print(" "*self.stack.pop(), end='')
+
+    def EMIT(self):
+        print(chr(self.stack.pop()), end=' ')
+
+    def NOT(self):
+        a = self.stack.pop()
+        val = 1 if a != 0 else 0
+        self.stack.append(val)
+
+    def AND(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        self.stack.append(a and b)
+
+    def OR(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        self.stack.append(a or b)
+
+    def SWAP(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        self.stack.append(a)
+        self.stack.append(b)
+
+    def _2SWAP(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        c = self.stack.pop()
+        d = self.stack.pop()
+        self.stack.append(a)
+        self.stack.append(b)
+        self.stack.append(c)
+        self.stack.append(d)
+
+    def DUP(self):
+        self.stack.append(self.stack[-1])
+
+    def _2DUP(self):
+        self.stack.append(self.stack[-1])
+
+    def ROT(self):
+        self.stack[-3], self.stack[-2], self.stack[-1] = self.stack[-2], self.stack[-1], self.stack[-3]
+
+    def TUCK(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        self.stack.append(a)
+        self.stack.append(b)
+        self.stack.append(a)
+
+    def OVER(self):
+        self.stack.append(self.stack[-2])
+
+    def DROP(self):
+        self.stack.pop()
+
+    def _2DROP(self):
+        self.stack.pop()
+        self.stack.pop()
+
+    def MOD(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = b % a
+        self.stack.append(val)
+
+    def __MOD(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = b % a
+        self.stack.append(val)
+        val = int(b / a)
+        self.stack.append(val)
+
+    def IF(self):
+        cond = self.stack.pop()
+
+        body = list()
+        val = self.symbols.pop(0)
+        while val != "THEN" and val != "ELSE":
+            body.append(val)
+            val = self.symbols.pop(0)
+
+        if len(self.symbols) > 0:
+            val = self.symbols.pop(0)
+
+        body2 = list()
+
+        while val != "THEN":
+            body2.append(val)
+            val = self.symbols.pop(0)
+
+        if cond != 0:
+            self.eval(body)
+        else:
+            self.eval(body2)
+
+    def LT(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = 1 if b < a else 0
+        self.stack.append(val)
+
+    def GT(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = 1 if b > a else 0
+        self.stack.append(val)
+
+    def ADD(self):
+        val = self.stack.pop() + self.stack.pop()
+        self.stack.append(val)
+
+    def SUB(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = b - a
+        self.stack.append(val)
+
+    def MUL(self):
+        val = self.stack.pop() * self.stack.pop()
+        self.stack.append(val)
+
+    def DIV(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = int(b / a)
+        self.stack.append(val)
+
+    def EQ(self):
+        a = self.stack.pop()
+        b = self.stack.pop()
+        val = 1 if a == b else 0
+        self.stack.append(val)
+
+    def EQZ(self):
+        a = self.stack.pop()
+        val = 1 if a == 0 else 0
+        self.stack.append(val)
+
+    def COLON(self):
+        name = self.symbols.pop(0)
+        body = list()
+        while self.symbols[0] != ';':
+            s = self.symbols.pop(0)
+            body.append(s)
+        self.symbols.pop()  # drop the ;
+        self.dictionary[name] = body
+
+    def DO(self):
+        index = self.stack[-1]
+        limit = self.stack[-2]
+        # self.stack.append(limit)
+        # self.stack.append(index)
+        body = list()
+        while self.symbols[0] != 'LOOP':
+            s = self.symbols.pop(0)
+            body.append(s)
+        self.symbols.pop(0)  # drop the LOOP
+
+        while index != limit:
+            self.eval(body.copy())
+            index = self.stack.pop()+1
+            limit = self.stack.pop()
+            self.stack.append(limit)
+            self.stack.append(index)
 
     def eval(self, symbols):
+        self.symbols = symbols
         while len(symbols) > 0:
             symbol = symbols.pop(0)
-            if symbol not in self.dictionary and not symbol.startswith('."') and symbol not in '. : CR DUP DROP TUCK OVER ROT IF I AND OR NOT MOD < > = 0= + - * / SPACES DO BEGIN WHILE REPEAT EMIT'.split() and not symbol.isdecimal():
+            if symbol not in self.dictionary and not symbol.startswith('."') and symbol not in self.instructionset and not symbol.isdecimal():
                 raise "UNKNOWN INSTRUCTION "
             try:
                 if symbol == 'I':
@@ -24,175 +209,14 @@ class Forth():
                 if symbol == ".S":
                     print("<", len(self.stack), ">", self.stack, end=' ')
 
-                if symbol == "CR":
-                    print("")
-                if symbol == "SPACES":
-                    print(" "*self.stack.pop(), end='')
-                if symbol == "SPACE":
-                    print(" ", end='')
+                if symbol in self.instructionset:
+                    self.instructionset[symbol]()
 
-                if symbol == "EMIT":
-                    print(chr(self.stack.pop()), end=' ')
                 if symbol.startswith('."'):
                     print(symbol[2:-1], end=' ')
 
-                if symbol == "+":
-                    val = self.stack.pop() + self.stack.pop()
-                    self.stack.append(val)
-                if symbol == "-":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = b - a
-                    self.stack.append(val)
-                if symbol == "*":
-                    val = self.stack.pop() * self.stack.pop()
-                    self.stack.append(val)
-                if symbol == "/":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = int(b / a)
-                    self.stack.append(val)
-
-                if symbol == "<":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = 1 if b < a else 0
-                    self.stack.append(val)
-                if symbol == ">":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = 1 if b > a else 0
-                    self.stack.append(val)
-                if symbol == "=":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = 1 if a == b else 0
-                    self.stack.append(val)
-                if symbol == "0=":
-                    a = self.stack.pop()
-                    val = 1 if a == 0 else 0
-                    self.stack.append(val)
-
-                if symbol == "NOT":
-                    a = self.stack.pop()
-                    val = 1 if a != 0 else 0
-                    self.stack.append(val)
-
-                if symbol == "AND":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    self.stack.append(a and b)
-
-                if symbol == "OR":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    self.stack.append(a or b)
-
-                if symbol == "SWAP":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    self.stack.append(a)
-                    self.stack.append(b)
-                if symbol == "2SWAP":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    c = self.stack.pop()
-                    d = self.stack.pop()
-                    self.stack.append(a)
-                    self.stack.append(b)
-                    self.stack.append(c)
-                    self.stack.append(d)
-
-                if symbol == "DUP":
-                    self.stack.append(self.stack[-1])
-                if symbol == "2DUP":
-                    self.stack.append(self.stack[-1])
-
-                if symbol == "ROT":
-                    self.stack[-3], self.stack[-2], self.stack[-1] = self.stack[-2], self.stack[-1], self.stack[-3]
-
-                if symbol == "TUCK":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    self.stack.append(a)
-                    self.stack.append(b)
-                    self.stack.append(a)
-
-                if symbol == "OVER":
-                    self.stack.append(self.stack[-2])
-
-                if symbol == "DROP":
-                    self.stack.pop()
-                if symbol == "2DROP":
-                    self.stack.pop()
-                    self.stack.pop()
-
-                if symbol == "MOD":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = b % a
-                    self.stack.append(val)
-
-                if symbol == "/MOD":
-                    a = self.stack.pop()
-                    b = self.stack.pop()
-                    val = b % a
-                    self.stack.append(val)
-                    val = int(b / a)
-                    self.stack.append(val)
-
-                if symbol == "DO":
-                    index = self.stack[-1]
-                    limit = self.stack[-2]
-                    # self.stack.append(limit)
-                    # self.stack.append(index)
-                    body = list()
-                    while symbols[0] != 'LOOP':
-                        s = symbols.pop(0)
-                        body.append(s)
-                    symbols.pop(0)  # drop the LOOP
-
-                    while index != limit:
-                        self.eval(body.copy())
-                        index = self.stack.pop()+1
-                        limit = self.stack.pop()
-                        self.stack.append(limit)
-                        self.stack.append(index)
-
-                if symbol == "IF":
-                    cond = self.stack.pop()
-
-                    body = list()
-                    val = symbols.pop(0)
-                    while val != "THEN" and val != "ELSE":
-                        body.append(val)
-                        val = symbols.pop(0)
-
-                    if len(symbols) > 0:
-                        val = symbols.pop(0)
-
-                    body2 = list()
-
-                    while val != "THEN":
-                        body2.append(val)
-                        val = symbols.pop(0)
-
-                    if cond != 0:
-                        self.eval(body)
-                    else:
-                        self.eval(body2)
-
                 if symbol in self.dictionary:
                     self.eval(self.dictionary[symbol].copy())
-
-                if symbol == ":":
-                    name = symbols.pop(0)
-                    body = list()
-                    while symbols[0] != ';':
-                        s = symbols.pop(0)
-                        body.append(s)
-                    symbols.pop()  # drop the ;
-                    self.dictionary[name] = body
 
             except IndexError as e:
                 print(e)
@@ -256,11 +280,10 @@ if __name__ == "__main__":
             ': powerset 1 3 .powerset ;',
             '3 2 1 powerset',
 
-
             ': perfect? 1 OVER 2 / 1 + 2 DO OVER I MOD 0 = IF I + THEN LOOP = ;',
             ' 6 perfect?',
-            #' 31 perfect?',
-            #' 33550336 perfect?',
+            # ' 31 perfect?',
+            # ' 33550336 perfect?',
             ]
 
     RC4 = """0 value ii        0 value jj
@@ -298,5 +321,5 @@ create SArray   256 allot   ( state array of 256 bytes )
     ii SArray get_byte   jj SArray get_byte +   as_byte SArray get_byte  xor
 ;"""
 
-    for line in prog[:8]:
-        forth.eval(line.split())
+    for line in prog[: 8]:
+        forth.eval(line.split()) # Here is where we "Parse"
